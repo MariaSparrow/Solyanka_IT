@@ -3,12 +3,14 @@ import numpy as np
 import pandas as pd
 import os
 from moexalgo import Ticker
+import math
+import time
 
 fund = 10000
 invest_strategy = True
 spec_strategy = False
 min_instrs_num = 8
-comission_pct = 0.03
+comission_part = 0.0003 # доля комиссии от цены сделки
 # st.write(os.getcwd())
 
 sec_portfolio_path = "./main/sec_portfolio.csv"
@@ -68,7 +70,9 @@ if st.sidebar.checkbox('Спекулятивная', value=spec_strategy, help=f
 else:
     spec_strategy = False
 
-
+while not spec_strategy and not invest_strategy:
+    st.sidebar.write('Для продолжения работы НЕОБХОДИМО выбрать стратегию.')
+    time.sleep(3)
 #=========== Starts Portfolio investigation ===============
 fields_path = './main/fields.csv'
 
@@ -103,7 +107,7 @@ data_dict = sec_length(fields_path)
 df = data_dict[list(data_dict.keys())[0]]
 df = df.drop(['begin'], axis=1)
 
-first_index = 50
+first_index = 30
 ds_list = []
 for col in df.columns:
     ds = pd.Series([0]*len(df))
@@ -120,13 +124,92 @@ for col in df.columns:
         ds[n] = cidx #sum_cidx
     ds_list.append(ds)
 data_field = pd.concat(ds_list, axis=1)
+st.write("Индексы инструментов")
 st.line_chart(data_field.loc[:,:])
+# st.dataframe(data_field.head()) 
 min_idx = data_field.idxmin(axis=1)
 max_idx = data_field.idxmax(axis=1)
-res_dict = {k:{'pos':0,'res':0,'deal':0} for k in data_field.columns}
-st.write(res_dict)
+data_field['min_idx'] = min_idx
+data_field['max_idx'] = max_idx
+res_columns = []
+for col in df.columns:
+    data_field[col+'_pos'] = 0
+    data_field[col+'_res'] = 0
+    data_field[col+'_deal'] = 0
+    res_columns.append(col+'_res')
 
-# for n in range(first_index+1,len(data_field)):
+buy_pos = 1
+if spec_strategy == True:
+    sell_pos = -1
+else:
+    sell_pos = 0
+for n in range(first_index+1,len(data_field)):
+    for col in df.columns:
+        if col == data_field.at[n,'min_idx']:
+            if data_field.at[n,col]>0:
+                deal_pos = 0
+            else:
+                deal_pos = sell_pos
+            mincol = col
+            if data_field.at[n-1,mincol+'_deal'] >= 0:
+                data_field.at[n,mincol+'_res'] = data_field.at[n-1,mincol+'_pos'] \
+                                + data_field.at[n-1,mincol+'_deal'] * df.at[n,mincol]
+                data_field.at[n,mincol+'_pos'] = data_field.at[n-1,mincol+'_pos'] \
+                                - (deal_pos - data_field.at[n-1,mincol+'_deal'] \
+                                - math.fabs(deal_pos - data_field.at[n-1,mincol+'_deal']) * comission_part \
+                                ) * df.at[n,mincol]
+                data_field.at[n,mincol+'_deal'] = deal_pos
+            else:
+                data_field.at[n,mincol+'_res'] = data_field.at[n-1,mincol+'_pos'] \
+                                + data_field.at[n-1,mincol+'_deal'] * df.at[n,mincol]
+                data_field.at[n,mincol+'_pos'] = data_field.at[n-1,mincol+'_pos'] 
+                data_field.at[n,mincol+'_deal'] = data_field.at[n-1,mincol+'_deal']
+            
+        elif col == data_field.at[n,'max_idx']:
+            if data_field.at[n,col]<0:
+                deal_pos = 0
+            else:
+                deal_pos = buy_pos
+            maxcol = col
+            if data_field.at[n-1,maxcol+'_deal'] <= 0:
+                data_field.at[n,maxcol+'_res'] = data_field.at[n-1,maxcol+'_pos'] \
+                                + data_field.at[n-1,maxcol+'_deal'] * df.at[n,maxcol]
+                data_field.at[n,maxcol+'_pos'] = data_field.at[n-1,maxcol+'_pos'] \
+                                - (deal_pos - data_field.at[n-1,maxcol+'_deal'] \
+                                - math.fabs(deal_pos - data_field.at[n-1,maxcol+'_deal']) * comission_part \
+                                ) * df.at[n,maxcol]
+                data_field.at[n,maxcol+'_deal'] = deal_pos
+            else:
+                data_field.at[n,maxcol+'_res'] = data_field.at[n-1,maxcol+'_pos'] \
+                                + data_field.at[n-1,maxcol+'_deal'] * df.at[n,maxcol]
+                data_field.at[n,maxcol+'_pos'] = data_field.at[n-1,maxcol+'_pos']
+                data_field.at[n,maxcol+'_deal'] = data_field.at[n-1,maxcol+'_deal']
+        
+        else:
+            data_field.at[n,col+'_res'] = data_field.at[n-1,col+'_pos'] \
+                            + data_field.at[n-1,col+'_deal'] * df.at[n,col]
+            data_field.at[n,col+'_pos'] = data_field.at[n-1,col+'_pos'] \
+                            - (0 - data_field.at[n-1,col+'_deal'] \
+                            - math.fabs(0 - data_field.at[n-1,col+'_deal']) * comission_part \
+                            ) * df.at[n,col]
+            data_field.at[n,col+'_deal'] = 0
+
+            # data_field.at[n,col+'_res'] = data_field.at[n-1,col+'_pos'] \
+            #                 + data_field.at[n-1,col+'_deal'] * df.at[n,col]
+            # data_field.at[n,col+'_pos'] = data_field.at[n-1,col+'_pos']
+            # data_field.at[n,col+'_deal'] = data_field.at[n-1,col+'_deal']
+            
+            
+        
+    # elif data_field.at[n-1,mincol+'_deal'] == 0:
+        
+        
+# st.write(df.columns)
+# st.dataframe(data_field.head(100))     
+
+data_field['res'] = data_field.loc[:, res_columns].sum(axis=1)
+st.text("Результат")
+st.line_chart(data_field['res'])
     
 
 
@@ -135,7 +218,7 @@ st.write(res_dict)
         
     
     
-st.line_chart(df)
+# st.line_chart(df)
 
 # for k, v in data_dict.items():
 
