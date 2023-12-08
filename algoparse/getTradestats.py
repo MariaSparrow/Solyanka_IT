@@ -2,13 +2,18 @@ from moexalgo import Ticker
 import pandas as pd
 
 fields_path = './main/fields.csv'
-def get_tradestats(fields_path, start_date='2020-01-01', end_date='2023-12-31', round_digits=4):
+def get_tradestats(fields_path, start_date='2010-01-01', end_date='2023-12-31', round_digits=4):
     fields = pd.read_csv(fields_path)
     field_names = fields['TRADE_CODE'].unique().tolist()
+    date_range = pd.date_range(start=start_date, end=end_date)
+
     for field_name in field_names:
         tiker_set = []
-        for date in [start_date, end_date]:
-            trade_stats = pd.DataFrame(Ticker(field_name).tradestats(date=date, till_date=date))
+
+        for date in date_range:
+            trade_stats = pd.DataFrame(Ticker(field_name).tradestats(date=date.strftime('%Y-%m-%d'), till_date=date.strftime('%Y-%m-%d')))
+            if (len(trade_stats) == 0):
+                continue
             trade_stats = trade_stats.drop(index=0)
 
             secid = trade_stats.iloc[0]['secid']
