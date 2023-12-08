@@ -7,221 +7,276 @@ import math
 import time
 
 fund = 10000
-invest_strategy = True
-spec_strategy = False
+path_to_data="./main"
 min_instrs_num = 8
 comission_part = 0.0003 # доля комиссии от цены сделки
 # st.write(os.getcwd())
 
-# файлы для сохранения
-sec_portfolio_path = "./main/sec_portfolio.csv" # портфель
-sec_deals_path = "./main/sec_deals.csv"         # сделки
-fund_path = "./main/fund.csv"                   # сумма депозита
-strategy_path = "./main/strategy.csv"           # стратегия
+def load_portfolio(path_to_data="./main", strategy = 'invest', sell_pos = ""):
+    sec_portfolio_path = os.path.join(path_to_data,"sec_portfolio_"+strategy+str(sell_pos)+'.csv') # портфель
+    sec_deals_path = os.path.join(path_to_data,"sec_deals_"+strategy+str(sell_pos)+'.csv')         # сделки
+    fund_path = os.path.join(path_to_data,"fund_"+strategy+str(sell_pos)+'.csv')                   # сумма депозита
+    # strategy_path = os.path.join(path_to_data,"strategy_"+strategy+str(sell_pos)+'.csv')           # стратегия
+    if os.path.exists(sec_portfolio_path):
+        sec_portfolio = pd.read_csv(sec_portfolio_path)
+    else:
+        sec_portfolio = pd.DataFrame(columns=['Количество, лоты', 'Балансовая стоимость, руб.','Процент портфеля, %'])
 
-# проверка существования сохраненных данных и загрузка при наличии
-if os.path.exists(fund_path):
-    with open(fund_path, "r") as f:
-        fund = float(f.readline())
-        min_instrs_num = int(f.readline())
-        
-if os.path.exists(sec_portfolio_path):
-    sec_portfolio = pd.read_csv(sec_portfolio_path)
-else:
-    sec_portfolio = pd.DataFrame(columns=['Количество, лоты', 'Балансовая стоимость, руб.','Процент портфеля, %'])
+    if os.path.exists(sec_deals_path):
+        sec_deals = pd.read_csv(sec_deals_path)
+    else:
+        sec_deals = pd.DataFrame(columns=['Дата', 'Время', 'Инструмент', 'Направление (купля/продажа)', 'Объем сделки, лоты', 'Цена сделки, рублей'])
 
-st.text('Портфель')
-st.dataframe(sec_portfolio)
 
-if os.path.exists(sec_deals_path):
-    sec_deals = pd.read_csv(sec_deals_path)
-else:
-    sec_deals = pd.DataFrame(columns=['Дата', 'Время', 'Инструмент', 'Направление (купля/продажа)', 'Объем сделки, лоты', 'Цена сделки, рублей'])
-
-if len(sec_deals) > 5:
-    sec_deals = sec_deals.iloc[-5:,:]
-st.text('Сделки')
-st.dataframe(sec_deals)
-
+    if os.path.exists(fund_path):
+        with open(fund_path, "r") as f:
+            init_fund = float(f.readline())
+            current_fund = float(f.readline())
+            min_instrs_num = int(f.readline())
+    else:
+        init_fund = 0
+        current_fund = 0
+        min_instrs_num = 8
     
-if os.path.exists(strategy_path):
-    with open(strategy_path, "r") as f:
-        invest_strategy = bool(f.readline())
-        spec_strategy = bool(f.readline())
+    return init_fund, current_fund, min_instrs_num, sec_portfolio, sec_deals
+            
 
 
-fund = st.sidebar.number_input("Сумма депозита, рублей", min_value=fund, max_value=10000000, placeholder="Введите сумму депозита...")
+
+
+#=========== Starts Input parameters ===============
 
 
 #st.sidebar.write(cash)
-st.sidebar.write('Выбор стратегии:')
+# st.sidebar.write('Выбор стратегии:')
 
-if st.sidebar.checkbox('Инвестиционная', value=invest_strategy, help=f"Только длинные позиции по инструментам. \
-                       \nНа один инструмент не более 1/{min_instrs_num} части активов. "):
-    invest_strategy = True
-else:
-    invest_strategy = False
-    
-if st.sidebar.checkbox('Спекулятивная', value=spec_strategy, help=f"Длинные и короткие позиции по инструментам.\n \
-    На один инструмент не более 1/{min_instrs_num} части активов.\n \
-    При выборе одновременно двух стратегий на cпекулятивную стратегию\n \
-    используется 1/{min_instrs_num} части активов, на инвестиционную\n \
-    стратегию остальная часть активов."):
-    
-    spec_strategy = True
-else:
-    spec_strategy = False
+strategy = st.sidebar.radio('Выбор стратегии:', ['Инвестиционная', 'Спекулятивная'],
+                    captions = [f"Только длинные позиции по инструментам.\n \
+                                На один инструмент не более 1/{min_instrs_num} части активов.\n",
+                                f"Длинные и короткие позиции по инструментам.\n \
+                                На один инструмент не более 1/{min_instrs_num} части активов.\n"])
 
-while not spec_strategy and not invest_strategy:
-    st.sidebar.write('Для продолжения работы НЕОБХОДИМО выбрать стратегию.')
-    time.sleep(3)
-#=========== Starts Portfolio investigation ===============
+if strategy == 'Спекулятивная':
+    strategy = 'spec'
+    if st.sidebar.checkbox('Включая короткие продажи'):
+        sell_pos = -1
+    else:
+        sell_pos = 0
+elif strategy == 'Инвестиционная':
+    strategy = 'invest'
+    
+buy_pos = 1
+
+operation = st.sidebar.radio('Выбор операций:', ['Торговля', 'Тестирование'],
+                    captions = ['Проведение торговых операций  по выбранной стратегии', \
+                                'Вывод результатов теста по выбранной стратегии'])
+init_fund = 0
+if operation == 'Торговля':
+    # operation = 'trade'
+    exec_type = 'trading'
+    init_fund, current_fund, min_instrs_num, sec_portfolio, sec_deals = load_portfolio(path_to_data="./main", strategy = 'invest', sell_pos = "")
+elif operation == 'Тестирование':
+    # operation = 'test'
+    exec_type = 'testing'
+        
+if init_fund == 0:
+    fund = st.sidebar.number_input("Сумма начального депозита, рублей", min_value=fund, max_value=10000000, placeholder="Введите сумму депозита...")
+    current_fund = fund
+else:
+    st.text("Начальный депозит, руб. : " + str(init_fund))
+    st.text("Остаток на счете, руб. : " + str(current_fund))
+    
+#=========== Ends Input parameters ===============
+
+#=========== Disclaimer ===============
+
+# agree = st.checkbox('Отказ от ответственности.', value=True)
+# while agree:
+#     txt = st.text_area()
+#=========== Ends Disclaimer ===============
+
+
+# файлы для сохранения
+
+# проверка существования сохраненных данных и загрузка при наличии
+    
+#=========== Starts loading data ===============
 fields_path = './main/fields.csv'
 
 @st.cache_data
 def sec_length(fields_path):
-    st.text("Скачивание данных")
-    data_dict = {}
-    sec_fields = pd.read_csv(fields_path)
-    for k, v in sec_fields.groupby('BIGFIELD').groups.items():
-        field_secs = list(sec_fields.loc[v,'TRADE_CODE'])
-        st.write(k)
-        fields_df = pd.DataFrame(Ticker(field_secs[0]).candles(date='2001-01-01', till_date='2023-12-04', period='D'))
-        fields_df = fields_df.drop(['open', 'high', 'low', 'value', 'volume', 'end'], axis=1)
-        fields_df.rename(columns={'close':field_secs[0]},inplace=True)
-        # st.write(field_secs[0], len(fields_df), fields_df.loc[0,'begin'],fields_df.loc[len(fields_df)-1,'begin'],fields_df.columns)
-        
-        for field in field_secs[1:]:
-            if field in ['VKCO', 'POSI','ENPG','WUSH','LENT','GEMC','MDMG','SMLT', \
-                'RENI','SPBE','ELFV','GLTR','FLOT','FIXP','OKEY','VSMO', 'BANEP']:
-                continue
-            # получим дневные свечи
-            a = pd.DataFrame(Ticker(field).candles(date='2001-01-01', till_date='2023-12-04', period='D')) # D 1h
-            a = a.drop(['open', 'high', 'low', 'value', 'volume', 'end'], axis=1)
-            a.rename(columns={'close':field},inplace=True)
-            # st.write(field, len(a), a.loc[0,'begin'],a.loc[len(a)-1,'begin'])
-            # fields_lst.append(a)
-            fields_df = pd.merge(fields_df,a,on='begin')
-        fields_df = fields_df.dropna(axis=0) #.set_index('begin')
-        data_dict[k] = fields_df
-        # st.write(k, len(fields_df), fields_df.loc[0,'begin'], fields_df.loc[len(fields_df)-1,'begin'])
+    with st.sidebar:
+        with st.spinner("Загрузка биржевых данных в разрезе экономических секторов...\n"):
+            data_dict = {}
+            sec_fields = pd.read_csv(fields_path)
+            my_bar = st.progress(0, text="")
+            groups_field = sec_fields.groupby('BIGFIELD').groups
+            groups_field_len = len(groups_field.keys())
+            nprogress = 1
+            for k, v in groups_field.items():
+                my_bar.progress(nprogress*groups_field_len, text=str(k))
+                nprogress += 1
+                field_secs = list(sec_fields.loc[v,'TRADE_CODE'])
+                fields_df = pd.DataFrame(Ticker(field_secs[0]).candles(date='2001-01-01', till_date='2024-12-04', period='D'))
+                fields_df = fields_df.drop(['open', 'high', 'low', 'value', 'volume', 'end'], axis=1)
+                fields_df.rename(columns={'close':field_secs[0]},inplace=True)
+                # st.write(field_secs[0], len(fields_df), fields_df.loc[0,'begin'],fields_df.loc[len(fields_df)-1,'begin'],fields_df.columns)
+                
+                for field in field_secs[1:]:
+                    if field in ['VKCO', 'POSI','ENPG','WUSH','LENT','GEMC','MDMG','SMLT', \
+                        'RENI','SPBE','ELFV','GLTR','FLOT','FIXP','OKEY','VSMO', 'BANEP']:
+                        continue
+                    # получим дневные свечи
+                    a = pd.DataFrame(Ticker(field).candles(date='2001-01-01', till_date='2024-12-04', period='D')) # D 1h
+                    a = a.drop(['open', 'high', 'low', 'value', 'volume', 'end'], axis=1)
+                    a.rename(columns={'close':field},inplace=True)
+                    # st.write(field, len(a), a.loc[0,'begin'],a.loc[len(a)-1,'begin'])
+                    # fields_lst.append(a)
+                    fields_df = pd.merge(fields_df,a,on='begin')
+                fields_df = fields_df.dropna(axis=0) #.set_index('begin')
+                data_dict[k] = fields_df
+                # st.write(k, len(fields_df), fields_df.loc[0,'begin'], fields_df.loc[len(fields_df)-1,'begin'])
+            my_bar.empty()
+    st.sidebar.success('Биржевые данные загружены.')
     return data_dict
 data_dict = sec_length(fields_path)
-
-first_index = 30
-
-for k in data_dict.keys():
-    st.write("Сектор экономики: ", k)
-    df = data_dict[k]
-    date_col = df.pop('begin')
-    ds_list = []
-    for col in df.columns:
-        ds = pd.Series([0]*len(df))
-        ds.name = col
-        sum_cidx = 0
-        for n in range(first_index+1,len(df)):
-            mx = df.loc[n-first_index:n-1,col].max()
-            mn = df.loc[n-first_index:n-1,col].min()
-            if mx == mn:
-                cidx = 0
-            else:
-                cidx = (df.at[n,col] - mn) / (mx - mn) - 1
-            # sum_cidx += cidx
-            ds[n] = cidx #sum_cidx
-        ds_list.append(ds)
-    data_field = pd.concat(ds_list, axis=1)
-    # st.write("Индексы инструментов")
-    # st.line_chart(data_field.loc[:,:])
-    # st.dataframe(data_field.head()) 
-    min_idx = data_field.idxmin(axis=1)
-    max_idx = data_field.idxmax(axis=1)
-    data_field['min_idx'] = min_idx
-    data_field['max_idx'] = max_idx
-    res_columns = []
-    for col in df.columns:
-        data_field[col+'_pos'] = 0
-        data_field[col+'_res'] = 0
-        data_field[col+'_deal'] = 0
-        res_columns.append(col+'_res')
-
-    # st.dataframe(data_field)     
+#=========== Ends loading data ===============
 
 
-    buy_pos = 1
-    if spec_strategy == True:
-        sell_pos = -1
+#=========== Starts Portfolio investigation ===============
+# , 
+if strategy == 'spec':
+    st.title('Спекулятивная стратегия.')
+    if sell_pos == -1:
+        st.text('Стратегия включает короткие продажи')
     else:
-        sell_pos = 0
+        st.text('Стратегия включает только длинные позиции')
+    if exec_type == 'testing':
+        first_index = 30
+        st.subheader("Тестовые результаты расчета модели.")
+        for k in data_dict.keys():
+            st.write("Сектор экономики: ", k)
+            df = data_dict[k]
+            date_col = df.pop('begin')
+            ds_list = []
+            for col in df.columns:
+                ds = pd.Series([0]*len(df))
+                ds.name = col
+                sum_cidx = 0
+                for n in range(first_index+1,len(df)):
+                    mx = df.loc[n-first_index:n-1,col].max()
+                    mn = df.loc[n-first_index:n-1,col].min()
+                    if mx == mn:
+                        cidx = 0
+                    else:
+                        cidx = (df.at[n,col] - mn) / (mx - mn) - 1
+                    # sum_cidx += cidx
+                    ds[n] = cidx #sum_cidx
+                ds_list.append(ds)
+            data_field = pd.concat(ds_list, axis=1)
+            # st.write("Индексы инструментов")
+            # st.line_chart(data_field.loc[:,:])
+            # st.dataframe(data_field.head()) 
+            min_idx = data_field.idxmin(axis=1)
+            max_idx = data_field.idxmax(axis=1)
+            data_field['min_idx'] = min_idx
+            data_field['max_idx'] = max_idx
+            res_columns = []
+            for col in df.columns:
+                data_field[col+'_pos'] = 0
+                data_field[col+'_res'] = 0
+                data_field[col+'_deal'] = 0
+                res_columns.append(col+'_res')
 
-    for n in range(first_index+1,len(data_field)):
-        for col in df.columns:
-            price = df.at[n,col] / df.at[0,col]
-            if col == data_field.at[n,'min_idx']:
-                if data_field.at[n,col]>0:
-                    deal_pos = 0
-                else:
-                    deal_pos = sell_pos
-                if data_field.at[n-1,col+'_deal'] >= 0:
-                    data_field.at[n,col+'_res'] = data_field.at[n-1,col+'_pos'] \
-                                    + data_field.at[n-1,col+'_deal'] * price
-                    data_field.at[n,col+'_pos'] = data_field.at[n-1,col+'_pos'] \
-                                    - (deal_pos - data_field.at[n-1,col+'_deal'] \
-                                    - math.fabs(deal_pos - data_field.at[n-1,col+'_deal']) * comission_part \
-                                    ) * price
-                    data_field.at[n,col+'_deal'] = deal_pos
-                else:
-                    data_field.at[n,col+'_res'] = data_field.at[n-1,col+'_pos'] \
-                                    + data_field.at[n-1,col+'_deal'] * price
-                    data_field.at[n,col+'_pos'] = data_field.at[n-1,col+'_pos'] 
-                    data_field.at[n,col+'_deal'] = data_field.at[n-1,col+'_deal']
-                
-            elif col == data_field.at[n,'max_idx']:
-                if data_field.at[n,col]<0:
-                    deal_pos = 0
-                else:
-                    deal_pos = buy_pos
-                if data_field.at[n-1,col+'_deal'] <= 0:
-                    data_field.at[n,col+'_res'] = data_field.at[n-1,col+'_pos'] \
-                                    + data_field.at[n-1,col+'_deal'] * price
-                    data_field.at[n,col+'_pos'] = data_field.at[n-1,col+'_pos'] \
-                                    - (deal_pos - data_field.at[n-1,col+'_deal'] \
-                                    - math.fabs(deal_pos - data_field.at[n-1,col+'_deal']) * comission_part \
-                                    ) * price
-                    data_field.at[n,col+'_deal'] = deal_pos
-                else:
-                    data_field.at[n,col+'_res'] = data_field.at[n-1,col+'_pos'] \
-                                    + data_field.at[n-1,col+'_deal'] * price
-                    data_field.at[n,col+'_pos'] = data_field.at[n-1,col+'_pos']
-                    data_field.at[n,col+'_deal'] = data_field.at[n-1,col+'_deal']
+            # st.dataframe(data_field)     
+
+
+            for n in range(first_index+1,len(data_field)):
+                for col in df.columns:
+                    price = df.at[n,col] / df.at[0,col]
+                    if col == data_field.at[n,'min_idx']:
+                        if data_field.at[n,col]>0:
+                            deal_pos = 0
+                        else:
+                            deal_pos = sell_pos
+                        if data_field.at[n-1,col+'_deal'] >= 0:
+                            data_field.at[n,col+'_res'] = data_field.at[n-1,col+'_pos'] \
+                                            + data_field.at[n-1,col+'_deal'] * price
+                            data_field.at[n,col+'_pos'] = data_field.at[n-1,col+'_pos'] \
+                                            - (deal_pos - data_field.at[n-1,col+'_deal'] \
+                                            - math.fabs(deal_pos - data_field.at[n-1,col+'_deal']) * comission_part \
+                                            ) * price
+                            data_field.at[n,col+'_deal'] = deal_pos
+                        else:
+                            data_field.at[n,col+'_res'] = data_field.at[n-1,col+'_pos'] \
+                                            + data_field.at[n-1,col+'_deal'] * price
+                            data_field.at[n,col+'_pos'] = data_field.at[n-1,col+'_pos'] 
+                            data_field.at[n,col+'_deal'] = data_field.at[n-1,col+'_deal']
+                        
+                    elif col == data_field.at[n,'max_idx']:
+                        if data_field.at[n,col]<0:
+                            deal_pos = 0
+                        else:
+                            deal_pos = buy_pos
+                        if data_field.at[n-1,col+'_deal'] <= 0:
+                            data_field.at[n,col+'_res'] = data_field.at[n-1,col+'_pos'] \
+                                            + data_field.at[n-1,col+'_deal'] * price
+                            data_field.at[n,col+'_pos'] = data_field.at[n-1,col+'_pos'] \
+                                            - (deal_pos - data_field.at[n-1,col+'_deal'] \
+                                            - math.fabs(deal_pos - data_field.at[n-1,col+'_deal']) * comission_part \
+                                            ) * price
+                            data_field.at[n,col+'_deal'] = deal_pos
+                        else:
+                            data_field.at[n,col+'_res'] = data_field.at[n-1,col+'_pos'] \
+                                            + data_field.at[n-1,col+'_deal'] * price
+                            data_field.at[n,col+'_pos'] = data_field.at[n-1,col+'_pos']
+                            data_field.at[n,col+'_deal'] = data_field.at[n-1,col+'_deal']
+                    
+                    else:
+                        data_field.at[n,col+'_res'] = data_field.at[n-1,col+'_pos'] \
+                                        + data_field.at[n-1,col+'_deal'] * price
+                        data_field.at[n,col+'_pos'] = data_field.at[n-1,col+'_pos'] \
+                                        - (0 - data_field.at[n-1,col+'_deal'] \
+                                        - math.fabs(0 - data_field.at[n-1,col+'_deal']) * comission_part \
+                                        ) * price
+                        data_field.at[n,col+'_deal'] = 0
+
+                        # data_field.at[n,col+'_res'] = data_field.at[n-1,col+'_pos'] \
+                        #                 + data_field.at[n-1,col+'_deal'] * price
+                        # data_field.at[n,col+'_pos'] = data_field.at[n-1,col+'_pos']
+                        # data_field.at[n,col+'_deal'] = data_field.at[n-1,col+'_deal']
+                        
+        
+            data_field['res'] = data_field.loc[:, res_columns].sum(axis=1)
+            st.text("Доля от депозита на 1 инструмент,\nусредненная по всем инструментам\n в секторе.")
             
-            else:
-                data_field.at[n,col+'_res'] = data_field.at[n-1,col+'_pos'] \
-                                + data_field.at[n-1,col+'_deal'] * price
-                data_field.at[n,col+'_pos'] = data_field.at[n-1,col+'_pos'] \
-                                - (0 - data_field.at[n-1,col+'_deal'] \
-                                - math.fabs(0 - data_field.at[n-1,col+'_deal']) * comission_part \
-                                ) * price
-                data_field.at[n,col+'_deal'] = 0
+            data_field.index = date_col
+            
+            st.line_chart(data_field['res']/len(df.columns))
 
-                # data_field.at[n,col+'_res'] = data_field.at[n-1,col+'_pos'] \
-                #                 + data_field.at[n-1,col+'_deal'] * price
-                # data_field.at[n,col+'_pos'] = data_field.at[n-1,col+'_pos']
-                # data_field.at[n,col+'_deal'] = data_field.at[n-1,col+'_deal']
-                
-                
+            # st.write(len(data_field), len(df))
 
-    data_field['res'] = data_field.loc[:, res_columns].sum(axis=1)
-    st.text("Результат")
-    st.text("Доля от депозита на 1 инструмент,\nусредненная по всем инструментам\n в секторе.")
+            st.dataframe(data_field)   
     
-    data_field.index = date_col
-    
-    st.line_chart(data_field['res']/len(df.columns))
+    elif exec_type == 'trading':     
+        st.title('Торговля в разработке')   
+        st.text('Портфель')
+        st.dataframe(sec_portfolio)
+        st.text('Последние сделки')
+        
+        if len(sec_deals) > 5:
+            sec_deals5 = sec_deals.iloc[-5:,:]
+        else:
+            st.dataframe(sec_deals)
 
-    # st.write(len(data_field), len(df))
-
-    st.dataframe(data_field)     
 # st.dataframe(df)     
+        
+
+elif strategy == 'invest':
+    st.title('Инвестиционная стратегия.')
+else:
+    st.title('Cтратегия не выбрана.')
+    
 
     
 
