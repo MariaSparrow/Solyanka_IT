@@ -12,7 +12,7 @@ fund = 10000
 first_index = 30
 path_to_data="./main"
 min_instrs_num = 8
-comission_part = 0.0003 # доля комиссии от цены сделки
+comission_part = 0.0008 # доля комиссии от цены сделки: 0.04% и проскальзывание: 0.04%
 # st.write(os.getcwd())
 
 def load_portfolio(path_to_data="./main", strategy = 'invest', sell_pos = ""):
