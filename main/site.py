@@ -1,5 +1,4 @@
 import streamlit as st
-import numpy as np
 import pandas as pd
 import os
 from moexalgo import Ticker
@@ -55,13 +54,13 @@ def load_portfolio(path_to_data="./main", strategy = 'invest', sell_pos = ""):
 st.sidebar.title('Параметры задачи.')
 
 strategy = st.sidebar.radio('Выбор стратегии:', ['Инвестиционная', 'Спекулятивная'],
-                    captions = [f"Только длинные позиции по инструментам.\n \
-                                На один инструмент не более 1/{min_instrs_num} части активов.\n",
-                                f"Длинные и короткие позиции по инструментам.\n \
-                                На один инструмент не более 1/{min_instrs_num} части активов.\n"], index=0)
+                    captions = [f"Только длинные позиции по инструментам.\n", \
+                                f"Длинные и короткие позиции по инструментам."], index=0)
 
 if strategy == 'Спекулятивная':
     strategy = 'spec'
+    operation_text = 'Торговля'
+    prognoz_text = 'Проведение торговых операций  по выбранной стратегии'
     if st.sidebar.checkbox('Включая короткие продажи'):
         sell_pos = -1
     else:
@@ -91,17 +90,20 @@ if strategy == 'Спекулятивная':
 elif strategy == 'Инвестиционная':
     strategy = 'invest'
     period='1D'
-    
+    operation_text = "Прогноз"
+    prognoz_text = 'Прогноз движения цен по выбранной стратегии'
+
 buy_pos = 1
 
-operation = st.sidebar.radio('Выбор операций:', ['Торговля', 'Тестирование'],
-                    captions = ['Проведение торговых операций  по выбранной стратегии', \
-                                'Вывод результатов теста по выбранной стратегии'], index=1)
+operation = st.sidebar.radio('Выбор операций:', [operation_text, 'Тестирование'],
+                    captions = [prognoz_text, 'Вывод результатов теста по выбранной стратегии'], index=1)
 init_fund = 0
 if operation == 'Торговля':
     # operation = 'trade'
     exec_type = 'trading'
     init_fund, current_fund, min_instrs_num, sec_portfolio, sec_deals = load_portfolio(path_to_data="./main", strategy = 'invest', sell_pos = "")
+elif operation == 'Прогноз':
+    exec_type = 'trading'
 elif operation == 'Тестирование':
     # operation = 'test'
     exec_type = 'testing'
@@ -196,56 +198,28 @@ def sec_length(fields_path, period='D'):
 def sec_length_ml(fields_path, period='D'):
     
     with st.sidebar:
-        with st.spinner("Загрузка биржевых данных в разрезе экономических секторов...\n"):
+        with st.spinner("Загрузка биржевых данных по инструментам ...\n"):
             data_dict = {}
             ml_index_data = pd.read_csv(fields_path)
             ml_index_data_sec_dict = ml_index_data.groupby('unique_id').groups
-            
-            # st.write(ml_index_data_sec_dict)
             my_bar = st.progress(0, text="")
             secs_name_list = list(ml_index_data_sec_dict.keys())
-            # st.write(secs_name_list)
-            
             ml_index_data_sec_dict_len = len(secs_name_list)
             nprogress = 0
             for k in secs_name_list: # k- бумага
                 my_bar.progress(nprogress/ml_index_data_sec_dict_len, text=str(k))
                 nprogress += 1
                 one_sec_pred_df =  ml_index_data[ml_index_data['unique_id'] == k]
-                # one_sec_pred_df.set_index('Unnamed: 0', inplace=True)
                 one_sec_pred_df.drop('Unnamed: 0', axis=1, inplace=True)
                 one_sec_pred_df.index = pd.Index(range(len(one_sec_pred_df)))
-                # st.write("=================one_sec_pred_df==============0")
-                # st.write(k, one_sec_pred_df)
-                # one_sec_pred_df.rename(columns={'ds':'begin'},inplace=True)
-                # one_sec_pred_df.rename(columns={'ds':'begin'},inplace=True)
-                
-                # st.write("=================one_sec_pred_df==============1")
-                # st.write(k, one_sec_pred_df)
                 start_day = one_sec_pred_df.at[0,'ds']         
                 end_day = one_sec_pred_df['ds'].iloc[-1] 
-                # st.write(start_day, end_day)
-                      
                 sec_df = pd.DataFrame(Ticker(k).candles(date=start_day, till_date=end_day, period=period))
-                # st.write(k,fs,int(fields_df.at[len(fields_df)-1,'end'].hour),datetime.now().hour)
                 sec_df = sec_df.drop(['close', 'high', 'low', 'value', 'volume', 'end'], axis=1)
-                # sec_df.rename(columns={'open':k},inplace=True)
-                # st.write(field_secs[0], len(fields_df), fields_df.loc[0,'begin'],fields_df.loc[len(fields_df)-1,'begin'],fields_df.columns)
-                # st.write("=================sec_df==============0")
-                # st.dataframe(sec_df)
-                # st.write(sec_df.info(verbose=True))
-                # st.write(one_sec_pred_df.info(verbose=True))
-                # sec_df['begin'] = pd.Series(map(lambda x: date.fromisoformat(x),sec_df['begin']))
-                # st.write("=================one_sec_pred_df==============1")
-                # st.dataframe(one_sec_pred_df)
                 
                 sec_df = pd.concat([sec_df,one_sec_pred_df], axis=1)
-                # st.write("=================sec_df==============1")
-                # st.dataframe(sec_df)
                 
                 sec_df = sec_df.dropna(axis=0) #.set_index('begin')
-                # st.write("=================fields_df==============")
-                # st.dataframe(fields_df)
                 data_dict[k] = sec_df
                 # st.write("=================sec_df==============2")
                 # st.dataframe(sec_df)
@@ -452,6 +426,7 @@ if strategy == 'spec':
                 st.dataframe(data_field)
                 data_deals[k] = data_field
                 # st.dataframe(data_deals[k])
+                
             st.text('Портфель')
             st.dataframe(sec_portfolio)
             st.text('Последние сделки')
@@ -472,25 +447,56 @@ if strategy == 'spec':
 
 elif strategy == 'invest':
     st.title('Инвестиционная стратегия.')
-    st.subheader("Тестовые результаты расчета модели.")
-    fields_path = './main/ml_pred.csv'
-    
-    data_ml_dict = sec_length_ml(fields_path, period='D')
-    # st.write(data_ml_dict.keys())
-    # st.write("=================data_ml_dict==============")
-    # st.dataframe(list(data_ml_dict.keys()))
-    sec_name_list = list(data_ml_dict.keys())
-    for sec, sec_data in data_ml_dict.items():
-        st.write(sec)
-        # st.dataframe(data_ml_dict[sec])
-        sec_data['open'] = sec_data['open'] / sec_data.at[0, 'open']
-        sec_data['koef_pred'] = 1 - sec_data['koef']
-        sec_data[['open', 'koef']] = sec_data[['open', 'koef']] - 1
-        sec_data['koef_pred'] = sec_data['koef_pred'].cumsum(axis=0)
-        sec_data = sec_data.set_index('begin')
-        # st.dataframe(sec_data)
-        st.write('Относительное изменение цены открытия "open" и предсказанного коэффициента "koef_pred"')
-        st.line_chart(sec_data[['open', 'koef_pred']])
+    if exec_type == 'testing':
+        st.subheader("Тестовые результаты расчета модели.")
+        fields_path = './main/ml_pred.csv'
+        
+        data_ml_dict = sec_length_ml(fields_path, period='D')
+        # st.write(data_ml_dict.keys())
+        # st.write("=================data_ml_dict==============")
+        # st.dataframe(list(data_ml_dict.keys()))
+        sec_name_list = list(data_ml_dict.keys())
+        for sec, sec_data in data_ml_dict.items():
+            st.write(sec)
+            # st.dataframe(data_ml_dict[sec])
+            sec_data['open'] = sec_data['open'] / sec_data.at[0, 'open']
+            sec_data['koef_pred'] = 1 - sec_data['koef']
+            
+            sec_data['open'] = sec_data['open'] - 1
+            sec_data['koef_pred'] = sec_data['koef_pred'].cumsum(axis=0)
+            
+            sec_data = sec_data.set_index('begin')
+            # st.dataframe(sec_data)
+            st.write('Относительное изменение цены открытия "open" и предсказанного коэффициента "koef_pred"')
+            st.line_chart(sec_data[['open', 'koef_pred']])
+    elif exec_type == 'trading':     
+        st.subheader("Предсказание модели.")
+        fields_path = './main/ml_pred.csv'
+        preds = pd.read_csv(fields_path)
+        # st.write("=================preds==============")
+        # st.dataframe(preds)
+        preds_dict = preds.groupby('unique_id').groups
+        secs_name_list = list(preds_dict.keys())
+        
+        # st.write(data_ml_dict.keys())
+        for sec, sec_data in preds_dict.items():
+            sec_data = preds.loc[sec_data,:]
+            sec_data.drop('Unnamed: 0', axis=1, inplace=True)
+            # st.wFrite(sec, sec_data)
+            # st.dataframe(data_ml_dict[sec])
+            sec_data['koef_pred'] = 1 - sec_data['koef']
+            # st.write("=================sec_data==============0")
+            # st.dataframe(sec_data)
+            
+            sec_data['open_preds'] = sec_data['koef_pred'].cumsum(axis=0)
+            sec_data.index = pd.Index(range(len(sec_data)))
+            
+            # sec_data = sec_data.set_index('begin')
+            # st.dataframe(sec_data)
+            st.write('Прогноз относительного изменения цены открытия')
+            st.line_chart(sec_data['open_preds'], y='open_preds')
+            # st.write("Дни")
+
         
 else:
     st.title('Cтратегия не выбрана.')
