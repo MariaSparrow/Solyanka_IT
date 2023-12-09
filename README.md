@@ -15,4 +15,4 @@ http://localhost:8501
 
 ### На сайте
 
-https://sitepy-ypdjfalefrvhnmbie4auge.streamlit.app/
+https://solyanka-it.streamlit.app/
