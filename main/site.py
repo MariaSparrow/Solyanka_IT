@@ -26,9 +26,8 @@ def load_portfolio(path_to_data="./main", strategy = 'invest', sell_pos = ""):
 
     if os.path.exists(sec_deals_path):
         sec_deals = pd.read_csv(sec_deals_path)
-    else:
-        sec_deals = pd.DataFrame(columns=['Дата', 'Время', 'Инструмент', 'Направление (купля/продажа)', 'Объем сделки, лоты', 'Цена сделки, рублей'])
-
+    # else:
+    #     sec_deals = pd.DataFrame(columns=['Дата', 'Время', 'Инструмент', 'Направление (купля/продажа)', 'Объем сделки, лоты', 'Цена сделки, рублей'])
 
     if os.path.exists(fund_path):
         with open(fund_path, "r") as f:
@@ -41,13 +40,8 @@ def load_portfolio(path_to_data="./main", strategy = 'invest', sell_pos = ""):
         min_instrs_num = 8
     
     return init_fund, current_fund, min_instrs_num, sec_portfolio, sec_deals
-            
-
-
-
 
 #=========== Starts Input parameters ===============
-
 
 #st.sidebar.write(cash)
 # st.sidebar.write('Выбор стратегии:')
@@ -123,7 +117,6 @@ else:
 # while agree:
 #     txt = st.text_area()
 #=========== Ends Disclaimer ===============
-
 
 # файлы для сохранения
 
@@ -227,7 +220,6 @@ def sec_length_ml(fields_path, period='D'):
             my_bar.empty()
     st.sidebar.success('Биржевые данные загружены.')
     return data_dict
-
 
 #=========== Ends loading data ===============
 
@@ -358,9 +350,9 @@ if strategy == 'spec':
     # Спекулятивная стратегия trading start =======================
     elif exec_type == 'trading':     
         st.title('Торговля в разработке')
-        data_dict = sec_length(fields_path, period)
+        data_dict = sec_length(fields_path, period) # словарь формата : {сектор:[DataFrame(), ...]}
         data_deals = {}
-        for k in data_dict.keys():
+        for k in data_dict.keys(): # k - сектор экономики
             data_deals[k] = pd.DataFrame(index=[0], columns=data_dict[k].columns)
             data_deals[k][0] = 0
             data_deals[k].pop('begin')
@@ -425,6 +417,7 @@ if strategy == 'spec':
                     data_field = take_deal(data_field, len(data_field)-1, price, col)
                 st.dataframe(data_field)
                 data_deals[k] = data_field
+                
                 # st.dataframe(data_deals[k])
                 
             st.text('Портфель')
@@ -454,24 +447,28 @@ elif strategy == 'invest':
         data_ml_dict = sec_length_ml(fields_path, period='D')
         # st.write(data_ml_dict.keys())
         # st.write("=================data_ml_dict==============")
-        # st.dataframe(list(data_ml_dict.keys()))
+        # st.dataframe(data_ml_dict['AKRN'])
         sec_name_list = list(data_ml_dict.keys())
         for sec, sec_data in data_ml_dict.items():
-            st.write(sec)
+            # st.write(sec)
             # st.dataframe(data_ml_dict[sec])
-            sec_data['open'] = sec_data['open'] / sec_data.at[0, 'open']
+            # sec_data['open'] = sec_data['open'] / sec_data.at[0, 'open']
+            sec_data['open'] = (sec_data['open'] - sec_data['open'].min()) / (sec_data['open'].max() - sec_data['open'].min())
             sec_data['koef_pred'] = 1 - sec_data['koef']
+            # st.dataframe(sec_data)
             
-            sec_data['open'] = sec_data['open'] - 1
+            sec_data['open'] = (sec_data['open'] - 1)
             sec_data['koef_pred'] = sec_data['koef_pred'].cumsum(axis=0)
-            
+            sec_data['koef_pred'] = (sec_data['koef_pred'] - sec_data['koef_pred'].min()) / (sec_data['koef_pred'].max() - sec_data['koef_pred'].min())
+            # st.dataframe(sec_data)
+            # (sec_data['koef_pred'].cumsum(axis=0).max() - sec_data['koef_pred'].cumsum(axis=0).min()) 
             sec_data = sec_data.set_index('begin')
             # st.dataframe(sec_data)
             st.write('Относительное изменение цены открытия "open" и предсказанного коэффициента "koef_pred"')
             st.line_chart(sec_data[['open', 'koef_pred']])
     elif exec_type == 'trading':     
         st.subheader("Предсказание модели.")
-        fields_path = './main/ml_pred.csv'
+        fields_path = './main/pred.csv'
         preds = pd.read_csv(fields_path)
         # st.write("=================preds==============")
         # st.dataframe(preds)
