@@ -1,10 +1,12 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import os
 from moexalgo import Ticker
 import math
 import time
 from datetime import date, datetime, timedelta
+from copy import copy
 
 today_date = date.today().strftime("%Y-%m-%d")
 fund = 10000
@@ -13,6 +15,8 @@ path_to_data="./main"
 min_instrs_num = 8
 comission_part = 0.0008 # доля комиссии от цены сделки: 0.04% и проскальзывание: 0.04%
 # st.write(os.getcwd())
+
+#=========== Starts loading data ===============
 
 def load_portfolio(path_to_data="./main", strategy = 'invest', sell_pos = ""):
     sec_portfolio_path = os.path.join(path_to_data,"sec_portfolio_"+strategy+str(sell_pos)+'.csv') # портфель
@@ -41,102 +45,7 @@ def load_portfolio(path_to_data="./main", strategy = 'invest', sell_pos = ""):
     
     return init_fund, current_fund, min_instrs_num, sec_portfolio, sec_deals
 
-#=========== Starts Input parameters ===============
 
-#st.sidebar.write(cash)
-# st.sidebar.write('Выбор стратегии:')
-st.sidebar.title('Параметры задачи.')
-
-strategy = st.sidebar.radio('Выбор стратегии:', ['Инвестиционная', 'Спекулятивная'], key='strategy',
-                            help="Инвестиционная стратегия использует машинное обучение временных рядов. На графиках \
-                                отражается тенденция изменения цены инструмента в будущие периоды.\n \
-                                Спекулятивная стратегия использует индексы по инструментам, сгруппированным \
-                                по экономическим секторам. Инструмент с максимальным индексом в секторе - покупается, \
-                                с минимальным - продается, по оставшимся инструментам позиция закрывается.",
-                    captions = [f"Только длинные позиции по инструментам.\n", \
-                                f"Длинные и короткие позиции по инструментам."], index=0)
-
-if strategy == 'Спекулятивная':
-    strategy = 'spec'
-    operation_text = 'Торговля'
-    prognoz_text = 'Проведение торговых операций  по выбранной стратегии'
-    if st.sidebar.checkbox('Включая короткие продажи'):
-        sell_pos = -1
-    else:
-        sell_pos = 0
-    period = st.sidebar.selectbox('Выберите временной интервал.',
-    ('1 минута', '10 минут', '1 час', 'День', 'Неделя'), index=3)
-    start_day_dict = {}
-    if period == '1 минута':
-        period = '1m'
-        td = timedelta(days=2)
-        start_day_dict[period] = (date.today() - timedelta(minutes=10000)).strftime("%Y-%m-%d")
-    elif period == '10 минут':
-        td = timedelta(days=2)
-        period = '10m'
-        start_day_dict[period] = (date.today() - timedelta(minutes=10000)).strftime("%Y-%m-%d")
-    elif period == '1 час':
-        td = timedelta(days=5)
-        period = '1h'
-        start_day_dict[period] = (date.today() - timedelta(hours=10000)).strftime("%Y-%m-%d")
-    elif period == 'День':
-        td = timedelta(days=first_index+1)
-        period = '1D'
-        start_day_dict[period] = (date.today() - timedelta(days=10000)).strftime("%Y-%m-%d")
-    elif period == 'Неделя':
-        td = timedelta(month=(first_index+2)//4)
-        period = '1W'
-        start_day_dict[period] = (date.today() - timedelta(weeks=1000)).strftime("%Y-%m-%d")
-    else:
-        td = timedelta(days=first_index+1)
-        period = '1D'
-        start_day_dict[period] = (date.today() - timedelta(days=10000)).strftime("%Y-%m-%d")
-
-elif strategy == 'Инвестиционная':
-    strategy = 'invest'
-    period='1D'
-    operation_text = "Прогноз"
-    prognoz_text = 'Прогноз движения цен по выбранной стратегии'
-
-buy_pos = 1
-
-operation = st.sidebar.radio('Выбор операций:', ['Тестирование', operation_text],  key = 'operation',
-                    captions = ['Вывод результатов теста по выбранной стратегии', prognoz_text], index=1)
-init_fund = 0
-if operation == 'Торговля':
-    # operation = 'trade'
-    exec_type = 'trading'
-    init_fund, current_fund, min_instrs_num, sec_portfolio, sec_deals = load_portfolio(path_to_data="./main", 
-                                                                                       strategy = 'invest', sell_pos = "")
-elif operation == 'Прогноз':
-    exec_type = 'trading'
-
-elif operation == 'Тестирование':
-    # operation = 'test'
-    exec_type = 'testing'
-        
-if init_fund == 0:
-    fund = st.sidebar.number_input("Сумма начального депозита, рублей", min_value=fund, max_value=10000000, key='fund', 
-                                   placeholder="Введите сумму депозита...")
-    current_fund = fund
-else:
-    st.text("Начальный депозит, руб. : " + str(init_fund))
-    st.text("Остаток на счете, руб. : " + str(current_fund))
-    
-#=========== Ends Input parameters ===============
-
-#=========== Disclaimer ===============
-
-# agree = st.checkbox('Отказ от ответственности.', value=True)
-# while agree:
-#     txt = st.text_area()
-#=========== Ends Disclaimer ===============
-
-# файлы для сохранения
-
-# проверка существования сохраненных данных и загрузка при наличии
-    
-#=========== Starts loading data ===============
 fields_path = './main/fields.csv'
 
 @st.cache_data(show_spinner=False)
@@ -239,6 +148,107 @@ def sec_length_ml(fields_path, period='D'):
 
 #=========== Ends loading data ===============
 
+#=========== Starts Input parameters ===============
+
+#st.sidebar.write(cash)
+# st.sidebar.write('Выбор стратегии:')
+st.sidebar.title('Параметры задачи.')
+
+strategy = st.sidebar.radio('Выбор стратегии:', ['Инвестиционная', 'Спекулятивная'], key='strategy',
+                            help="Инвестиционная стратегия использует машинное обучение временных рядов. На графиках \
+                                отражается тенденция изменения цены инструмента в будущие периоды.\n \
+                                Спекулятивная стратегия использует индексы по инструментам, сгруппированным \
+                                по экономическим секторам. Инструмент с максимальным индексом в секторе - покупается, \
+                                с минимальным - продается, по оставшимся инструментам позиция закрывается.",
+                    captions = [f"Только длинные позиции по инструментам.\n", \
+                                f"Длинные и короткие позиции по инструментам."], index=0)
+
+if strategy == 'Спекулятивная':
+    strategy = 'spec'
+    operation_text = 'Торговля'
+    prognoz_text = 'Проведение торговых операций  по выбранной стратегии'
+    if st.sidebar.checkbox('Включая короткие продажи'):
+        sell_pos = -1
+    else:
+        sell_pos = 0
+    period = st.sidebar.selectbox('Выберите временной интервал.',
+    ('1 минута', '10 минут', '1 час', 'День', 'Неделя'), index=3)
+    start_day_dict = {}
+    if period == '1 минута':
+        period = '1m'
+        td = timedelta(days=2)
+        start_day_dict[period] = (date.today() - timedelta(minutes=10000)).strftime("%Y-%m-%d")
+    elif period == '10 минут':
+        td = timedelta(days=2)
+        period = '10m'
+        start_day_dict[period] = (date.today() - timedelta(minutes=10000)).strftime("%Y-%m-%d")
+    elif period == '1 час':
+        td = timedelta(days=5)
+        period = '1h'
+        start_day_dict[period] = (date.today() - timedelta(hours=10000)).strftime("%Y-%m-%d")
+    elif period == 'День':
+        td = timedelta(days=first_index+1)
+        period = '1D'
+        start_day_dict[period] = (date.today() - timedelta(days=10000)).strftime("%Y-%m-%d")
+    elif period == 'Неделя':
+        td = timedelta(weeks=first_index+1)
+        period = '1W'
+        start_day_dict[period] = (date.today() - timedelta(weeks=1000)).strftime("%Y-%m-%d")
+    else:
+        td = timedelta(days=first_index+1)
+        period = '1D'
+        start_day_dict[period] = (date.today() - timedelta(days=10000)).strftime("%Y-%m-%d")
+
+elif strategy == 'Инвестиционная':
+    strategy = 'invest'
+    period='1D'
+    operation_text = "Прогноз"
+    prognoz_text = 'Прогноз движения цен по выбранной стратегии'
+
+buy_pos = 1
+
+operation = st.sidebar.radio('Выбор операций:', ['Тестирование', operation_text],  key = 'operation',
+                    captions = ['Вывод результатов теста по выбранной стратегии', prognoz_text], index=1)
+init_fund = 0
+if operation == 'Торговля':
+    # operation = 'trade'
+    exec_type = 'trading'
+    init_fund, current_fund, min_instrs_num, sec_portfolio, sec_deals = load_portfolio(path_to_data="./main", 
+                                                                                       strategy = 'invest', sell_pos = "")
+elif operation == 'Прогноз':
+    exec_type = 'trading'
+
+elif operation == 'Тестирование':
+    # operation = 'test'
+    exec_type = 'testing'
+        
+if init_fund == 0:
+    fund = st.sidebar.number_input("Сумма начального депозита, рублей", min_value=fund, max_value=10000000, key='fund', 
+                                   placeholder="Введите сумму депозита...")
+    current_fund = fund
+else:
+    st.text("Начальный депозит, руб. : " + str(init_fund))
+    st.text("Остаток на счете, руб. : " + str(current_fund))
+
+if st.sidebar.button('Перезагрузить данные'):
+    sec_length.clear()
+    sec_length_ml.clear()
+
+    
+#=========== Ends Input parameters ===============
+
+#=========== Disclaimer ===============
+
+# agree = st.checkbox('Отказ от ответственности.', value=True)
+# while agree:
+#     txt = st.text_area()
+#=========== Ends Disclaimer ===============
+
+# файлы для сохранения
+
+# проверка существования сохраненных данных и загрузка при наличии
+    
+
 def minmaxidx(df, first_index):
     ds_list = []
     for col in df.columns:
@@ -333,6 +343,44 @@ def data_deals_table(data_dict):
         # st.dataframe(data_deals[k])
     return data_deals, secs_names, last_times
 
+
+def remove_weekends(sd):
+    # sdc = list(map(date.fromisoformat, sd))
+    # sdc = pd.Series(sd)
+    # sdc = copy(sd)
+    # sdc.index = pd.Index(range(len(sdc)))
+    sdc = [d for d in sd if date.fromisoformat(d).weekday() not in [5,6]]
+    
+    # st.write("352=================sdc==============")
+    # st.write(sdc)
+    
+    for i in range(len(sdc),len(sd)):
+        # st.write("356=================i sdc[i], ==============")
+        # st.write(i, sdc)
+        cur_day =  (date.fromisoformat(sdc[i-1]) + timedelta(days=1)).strftime("%Y-%m-%d")
+        wd = date.fromisoformat(cur_day).weekday()
+        if wd == 5:
+            sdc.append((date.fromisoformat(cur_day) + timedelta(days=2)).strftime("%Y-%m-%d"))
+        elif wd == 6:
+            sdc.append((date.fromisoformat(cur_day) + timedelta(days=1)).strftime("%Y-%m-%d"))
+        else:
+            sdc.append(cur_day)
+        # st.write("365=================i sdc[i], ==============")
+        # st.write(i, sdc)
+    # sdc = pd.Series(sdc)
+    # st.write("371=================sdc==============")
+    # st.write(sdc)
+    return sdc
+
+
+@st.cache_data()
+def load_preds(fields_path):
+    preds = pd.read_csv(fields_path)
+    # st.write("=================preds==============")
+    # st.dataframe(preds)
+    return preds
+
+
 #=========== Starts Portfolio investigation ===============
 
 if strategy == 'spec':
@@ -413,6 +461,14 @@ if strategy == 'spec':
             sec_deals = st.session_state['sec_deals']
         else:
             st.session_state['sec_deals'] = sec_deals
+        
+        
+        st.text('Портфель')
+        st.dataframe(sec_portfolio)
+        
+        st.text('Последние сделки')
+        st.dataframe(sec_deals)
+
             
         # st.write("383=================data_dict['ИТ']==============")
         # st.dataframe(data_dict['ИТ'])
@@ -478,8 +534,9 @@ if strategy == 'spec':
                 # st.write("477=================price_df==============")
                 # st.write(col)
                 # st.dataframe(price_df)
-                if price_df.empty:
-                    continue
+                # if price_df.empty:
+                #     st.dataframe(price_df)
+                #     continue
                 if price_df.at[price_df.index[-1],'begin'] != st.session_state['last_times']['time'+k+col]:
                     st.session_state['last_times']['time'+k+col] = price_df.at[price_df.index[-1],'begin']
                     price = price_df.at[price_df.index[-1],'open']
@@ -507,12 +564,6 @@ if strategy == 'spec':
             # st.write("493=================data_deals[k]==============")
             # st.dataframe(data_deals[k])
                 
-        st.text('Портфель')
-        st.dataframe(sec_portfolio)
-        
-        st.text('Последние сделки')
-        st.dataframe(sec_deals)
-
             # while last_time == last_time0:
             #     fields_df = pd.DataFrame(Ticker('SBER').candles(date=today_date, till_date=today_date, period=period))
             #     last_time = fields_df.at[len(fields_df)-1, 'end']
@@ -525,10 +576,8 @@ if strategy == 'spec':
             st.stop()
         st.rerun()
 
-
 # st.dataframe(df)     
     # Спекулятивная стратегия trading end =======================
-        
 
 elif strategy == 'invest':
     st.title('Инвестиционная стратегия.')
@@ -560,18 +609,22 @@ elif strategy == 'invest':
             # st.dataframe(sec_data)
             st.write('Относительное изменение цены открытия "open" и предсказанного коэффициента "koef_pred"')
             st.line_chart(sec_data[['open', 'koef_pred']])
+# Предсказание модели =========================================================================            
     elif exec_type == 'trading':     
         fields_path = st.file_uploader("Выбор файла для прогноза.")
         if fields_path == None:
             fields_path = './main/preds.csv'
-        first_forcast_date = st.date_input("Введите дату, с которой начинается прогноз", value='today', format="YYYY-MM-DD")
-        st.subheader("Предсказание модели.")
-        preds = pd.read_csv(fields_path)
-        preds = preds[preds['ds']>=first_forcast_date.strftime("%Y-%m-%d")]
-        # st.write("=================preds==============")
-        # st.dataframe(preds)
-        
+            
+        preds = load_preds(fields_path)
+        first_forcast_date = preds.at[0,'ds']
+           
+        first_forcast_date = st.date_input("Введите дату, с которой начинается прогноз", 
+                                           value=date.fromisoformat(first_forcast_date), format="YYYY-MM-DD")
+        preds = preds[preds['ds']>=first_forcast_date.strftime("%Y-%m-%d")] # 
         preds_dict = preds.groupby('unique_id').groups
+        st.subheader("Предсказание модели.")
+        # st.write(first_forcast_date)
+        # st.write("622=================sec_data==============")
         secs_name_list = list(preds_dict.keys())
         
         # data_ml_dict = sec_length_ml(fields_path, period='D')
@@ -580,28 +633,45 @@ elif strategy == 'invest':
             st.write('Инструмент: ',sec)
             sec_data = preds.loc[sec_data,:]
             sec_data.drop('Unnamed: 0', axis=1, inplace=True)
-            # st.wFrite(sec, sec_data)
-            # st.dataframe(data_ml_dict[sec])
             sec_data['koef_pred'] = 1 - sec_data['koef']
-            # st.write("=================sec_data==============0")
+            # st.write("632=================sec_data==============")
             # st.dataframe(sec_data)
             
             sec_data['open_preds'] = sec_data['koef_pred'].cumsum(axis=0)
             sec_data['open_preds'] = (sec_data['open_preds'] - sec_data['open_preds'].min()) / (sec_data['open_preds'].max() - sec_data['open_preds'].min())
             sec_data['open_preds'] = sec_data['open_preds'] - sec_data.at[sec_data.index[0], 'open_preds']
+            # sd_ds = sec_data['ds']
+            # st.write("639=================sec_data==============")
+            # st.write(sec_data)
+            sd_ds = remove_weekends(sec_data.loc[:, 'ds'])
+            # st.write("647=================len(sd_ds), len(sec_data)==============")
+            # st.write(len(sd_ds), len(sec_data))
+                
+            sec_data = sec_data.drop('ds', axis=1)
+            # st.write("651=================sec_data==============")
+            # st.dataframe(sec_data)
+            sec_data['ds'] = sd_ds
+            sec_data = sec_data.set_index('ds')
+            # st.write("655=================sec_data==============")
+            # st.dataframe(sec_data)
             
-            sec_data.index = pd.Index(sec_data['ds'])
-            
-            sec_df = pd.DataFrame(Ticker(sec).candles(date=first_forcast_date.strftime("%Y-%m-%d"), till_date=today_date, period='1D'))
+            sec_df = pd.DataFrame(Ticker(sec).candles(date=first_forcast_date.strftime("%Y-%m-%d"), 
+                                                      till_date=today_date, 
+                                                      period='1D'))
+            # st.write("652=================sec_df==============")
+            # st.dataframe(sec_df)
             sec_df.index = pd.Index(map(lambda x: str(x).split(' ')[0], sec_df['begin']))
             sec_df['open'] = (sec_df['open'] - sec_df['open'].min()) / (sec_df['open'].max() - sec_df['open'].min())
             sec_df['open'] = sec_df['open'] - sec_df.at[sec_df.index[0], 'open']
-            # st.dataframe(sec_df)
             
             # sec_data = sec_data.set_index('begin')
+            # st.write("657=================sec_df==============")
+            # st.dataframe(sec_df)
+            # st.write("659=================sec_data==============")
             # st.dataframe(sec_data)
             sec_data = pd.concat([sec_data, sec_df], axis=1)
-            st.write(f'Прогноз относительного изменения цены открытия, начиная с даты {first_forcast_date.strftime("%Y-%m-%d")}')
+            st.write(f'Прогноз цены открытия - open_preds и реальные цены - open, \n \
+                     нормализованные значения, начиная с даты {first_forcast_date.strftime("%Y-%m-%d")}')
             chrt_dat = sec_data.loc[:,['open','open_preds']]
             # st.dataframe(sec_data)
             st.line_chart(chrt_dat)
